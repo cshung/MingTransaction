@@ -1,4 +1,4 @@
-﻿namespace kvs
+﻿namespace MingTransaction
 {
     public class GetResult
     {

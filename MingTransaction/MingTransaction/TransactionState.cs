@@ -1,4 +1,4 @@
-﻿namespace kvs
+﻿namespace MingTransaction
 {
     internal enum TransactionState
     {

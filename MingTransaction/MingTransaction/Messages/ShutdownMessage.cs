@@ -1,12 +1,12 @@
-﻿namespace kvs
+﻿namespace MingTransaction
 {
     using System.Threading.Tasks;
 
-    internal class CollectMessage : IMessage
+    internal class ShutdownMessage : IMessage
     {
         public TaskCompletionSource<bool> TaskCompletionSource { get; }
 
-        public CollectMessage(TaskCompletionSource<bool> tcs)
+        public ShutdownMessage(TaskCompletionSource<bool> tcs)
         {
             this.TaskCompletionSource = tcs;
         }

@@ -1,10 +1,10 @@
-﻿namespace kvs
+﻿namespace MingTransaction
 {
     using System.Threading.Tasks;
 
-    internal class CommitMessage : IMessage
+    internal class AbortMessage : IMessage
     {
-        public CommitMessage(TaskCompletionSource<bool> tcs, Transaction transaction)
+        public AbortMessage(TaskCompletionSource<bool> tcs, Transaction transaction)
         {
             this.TaskCompletionSource = tcs;
             this.Transaction = transaction;
