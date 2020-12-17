@@ -7,7 +7,7 @@ A schedule is recoverable if a transaction does not commit until all transaction
 
 > The reason why a transaction needs to be rollback is because it made wrong assumption based on reading wrong input. If a transaction commits only after all its inputs are known to be correct, there is no way such a transaction is wrong.
 
-A schedule is called cascadeless if it only read committed data. Such a schedule never requires rolling back a transaction becaues it read wrong data from aborting transaction. Therefore aborting one transaction will never cause another to abort.
+A schedule is called cascadeless if it only read committed data. Such a schedule never requires rolling back a transaction because it read wrong data from aborting transaction. Therefore aborting one transaction will never cause another to abort.
 
 A schedule is called strict if it never reads or writes a data item until the transaction producing the data item is committed. Such a schedule allows undoing a write simply by replacing it by the value before it was written (because that is guaranteed to be already committed and newer committed version cannot exist)
 
@@ -33,7 +33,7 @@ A data item is marked with a read timestamp and a write timestamp, representing 
 
 2. If Write(T, X) but RTS(X) < TS(T), abort
 
-> Yonger transaction have already read the value, if I write, that transaction would have read a wrong one, so bail out.
+> Younger transaction have already read the value, if I write, that transaction would have read a wrong one, so bail out.
 
 3. If Write(T, X) but WTS(X) < TS(T), abort
 
