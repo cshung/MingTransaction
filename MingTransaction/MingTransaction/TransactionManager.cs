@@ -2,6 +2,7 @@
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Threading;
     using System.Threading.Tasks;
 
@@ -199,7 +200,7 @@
             return result;
         }
 
-        internal List<Version> GetVersions(string key)
+        private List<Version> GetVersions(string key)
         {
             List<Version> versions;
             if (!m_versions.TryGetValue(key, out versions))
@@ -209,6 +210,33 @@
                 m_versions.Add(key, versions);
             }
             return versions;
+        }
+
+        internal Version GetLastWrittenVersion(string key, long timestamp)
+        {
+            List<Version> versions = this.GetVersions(key);
+            for (int i = versions.Count - 1; i >= 0; i--)
+            {
+                Version version = versions[i];
+                Transaction writingTransaction = version.WriteTransaction;
+                if (writingTransaction == null)
+                {
+                    version.WriteTransaction = writingTransaction = new Transaction(this) { m_id = 0, m_state = TransactionState.Committed };
+                }
+                if (writingTransaction.m_state != TransactionState.Aborted && writingTransaction.m_id <= timestamp)
+                {
+                    return version;
+                }
+            }
+            Debug.Assert(false);
+            return null;
+        }
+
+        internal void AddVersion(string key, Version newVersion)
+        {
+            List<Version> versions = this.GetVersions(key);
+            versions.Add(newVersion);
+            // TODO: Make sure the versions are sorted by write timestamp
         }
     }
 }

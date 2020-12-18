@@ -64,26 +64,6 @@
             taskCompletionSource.SetResult(true);
         }
 
-        private Version GetLastWrittenVersion(string key)
-        {
-            List<Version> versions = this.m_transactionManager.GetVersions(key);
-            for (int i = versions.Count - 1; i >= 0; i--)
-            {
-                Version version = versions[i];
-                Transaction writingTransaction = version.WriteTransaction;
-                if (writingTransaction == null)
-                {
-                    version.WriteTransaction = writingTransaction = new Transaction(this.m_transactionManager) { m_id = 0, m_state = TransactionState.Committed };
-                }
-                if (writingTransaction.m_state != TransactionState.Aborted && writingTransaction.m_id <= this.m_id)
-                {
-                    return version;
-                }
-            }
-            Debug.Assert(false);
-            return null;
-        }
-
         internal void DoGet(TaskCompletionSource<GetResult> taskCompletionSource, string key)
         {
             GetResult result = new GetResult();
@@ -95,20 +75,18 @@
             else
             {
                 result.Succeed = true;
-                Version writingVersion = GetLastWrittenVersion(key);
+                Version writingVersion = this.m_transactionManager.GetLastWrittenVersion(key, this.m_id);
                 Transaction writingTransaction = writingVersion.WriteTransaction;
                 Debug.Assert(writingTransaction.m_state != TransactionState.Uninitialized);
-                if (writingTransaction.m_state != TransactionState.Aborted)
+                Debug.Assert(writingTransaction.m_state != TransactionState.Aborted);
+                if (writingTransaction != this && writingTransaction.m_state == TransactionState.Pending)
                 {
-                    if (writingTransaction != this && writingTransaction.m_state == TransactionState.Pending)
-                    {
-                        this.m_dependentTransactionCount++;
-                        writingTransaction.m_dependentTransactions.Add(this);
-                    }
-                    writingVersion.ReadTimeStamp = Math.Max(this.m_id, writingVersion.ReadTimeStamp);
-                    result.Content = writingVersion.Content;
-                    taskCompletionSource.SetResult(result);
+                    this.m_dependentTransactionCount++;
+                    writingTransaction.m_dependentTransactions.Add(this);
                 }
+                writingVersion.ReadTimeStamp = Math.Max(this.m_id, writingVersion.ReadTimeStamp);
+                result.Content = writingVersion.Content;
+                taskCompletionSource.SetResult(result);
             }
         }
 
@@ -120,28 +98,24 @@
             }
             else
             {
-                Version writingVersion = GetLastWrittenVersion(key);
+                Version writingVersion = this.m_transactionManager.GetLastWrittenVersion(key, this.m_id);
                 Transaction writingTransaction = writingVersion.WriteTransaction;
-                if (writingTransaction.m_id <= this.m_id)
+                Debug.Assert(writingTransaction.m_id <= this.m_id);
+                Debug.Assert(writingTransaction.m_state != TransactionState.Uninitialized);
+                Debug.Assert(writingTransaction.m_state != TransactionState.Aborted);
+                if (writingVersion.ReadTimeStamp > this.m_id)
                 {
-                    Debug.Assert(writingTransaction.m_state != TransactionState.Uninitialized);
-                    if (writingTransaction.m_state != TransactionState.Aborted)
-                    {
-                        if (writingVersion.ReadTimeStamp > this.m_id)
-                        {
-                            this.Abort(false);
-                            taskCompletionSource.SetResult(false);
-                        }
-                        else
-                        {
-                            Version newVersion = new Version();
-                            newVersion.Content = value;
-                            newVersion.ReadTimeStamp = this.m_id;
-                            newVersion.WriteTransaction = this;
-                            this.m_transactionManager.GetVersions(key).Add(newVersion);
-                            taskCompletionSource.SetResult(true);
-                        }
-                    }
+                    this.Abort(false);
+                    taskCompletionSource.SetResult(false);
+                }
+                else
+                {
+                    Version newVersion = new Version();
+                    newVersion.Content = value;
+                    newVersion.ReadTimeStamp = this.m_id;
+                    newVersion.WriteTransaction = this;
+                    this.m_transactionManager.AddVersion(key, newVersion);
+                    taskCompletionSource.SetResult(true);
                 }
             }
         }
