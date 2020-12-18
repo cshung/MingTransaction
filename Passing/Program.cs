@@ -59,7 +59,7 @@
 
         static async Task PlayAsync()
         {
-            for (int i = 0; i < 5000000; i++)
+            for (int i = 0; i < 500000; i++)
             {
                 Transaction t = new Transaction(transactionManager);
                 await t.InitializeAsync();
