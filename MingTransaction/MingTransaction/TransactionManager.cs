@@ -1,11 +1,16 @@
 ﻿namespace MingTransaction
 {
+    using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
+    using System.Linq;
+    using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
 
     public class TransactionManager
     {
+        private const bool delayCollection = true;
         private Queue<IMessage> m_messages = new Queue<IMessage>();
         private long m_id = 0;
         private Dictionary<string, List<Version>> m_versions = new Dictionary<string, List<Version>>();
@@ -13,6 +18,26 @@
 
         public TransactionManager()
         {
+            if (delayCollection)
+            {
+                GC.RegisterForFullGCNotification(10, 10);
+                new Thread(WaitForFullGC).Start();
+            }
+        }
+
+        private void WaitForFullGC()
+        {
+            Thread.CurrentThread.IsBackground = true;
+            while (true)
+            {
+                // Check for a notification of an approaching collection.
+                GCNotificationStatus s = GC.WaitForFullGCApproach();
+                if (s == GCNotificationStatus.Succeeded)
+                {
+                    this.CollectAsync().Wait();
+                    GC.Collect();
+                }
+            }
         }
 
         public Task CollectAsync()
@@ -92,7 +117,21 @@
             }
         }
 
-        private void Collect(TaskCompletionSource<bool> taskCompletionSource)
+        internal void Collect(TaskCompletionSource<bool> taskCompletionSource)
+        {
+            this.DoCollect();
+            taskCompletionSource.SetResult(true);
+        }
+
+        internal void Collect()
+        {
+            if (!delayCollection)
+            {
+                this.DoCollect();
+            }
+        }
+
+        internal void DoCollect()
         {
             if (this.m_pendingTransactions.Count == 0)
             {
@@ -120,13 +159,14 @@
                 long oldestTransaction = this.m_pendingTransactions.Min;
                 foreach (List<Version> versions in this.m_versions.Values)
                 {
-                    Stack<int> toDelete = new Stack<int>();
+                    List<Version> copy = new List<Version>(versions);
+                    List<int> toDelete = new List<int>();
                     bool done = false;
                     for (int i = versions.Count - 1; i >= 0; i--)
                     {
                         if (done)
                         {
-                            toDelete.Push(i);
+                            toDelete.Add(i);
                         }
                         else
                         {
@@ -138,9 +178,9 @@
                             }
                             if (writingTransaction.m_state == TransactionState.Aborted)
                             {
-                                toDelete.Push(i);
+                                toDelete.Add(i);
                             }
-                            else if (writingTransaction.m_id <= oldestTransaction)
+                            else if (writingTransaction.m_state == TransactionState.Committed && writingTransaction.m_id <= oldestTransaction)
                             {
                                 // This is the last one we will need, any older version is gone
                                 done = true;
@@ -148,14 +188,22 @@
 
                         }
                     }
-                    while (toDelete.Count > 0)
+                    foreach (int v in toDelete)
                     {
-                        versions.RemoveAt(toDelete.Pop());
+                        versions.RemoveAt(v);
                     }
+                    Debug.Assert(versions.Count > 0);
+                    bool temp = false;
+                    foreach (Version v in versions)
+                    {
+                        if (v.WriteTransaction.m_state == TransactionState.Committed)
+                        {
+                            temp = true;
+                        }
+                    }
+                    Debug.Assert(temp);
                 }
-
             }
-            taskCompletionSource.SetResult(true);
         }
 
         internal long GetNextTransactionId()

@@ -129,7 +129,7 @@
                     {
                         if (writingVersion.ReadTimeStamp > this.m_id)
                         {
-                            this.Abort();
+                            this.Abort(false);
                             taskCompletionSource.SetResult(false);
                         }
                         else
@@ -148,17 +148,24 @@
 
         internal void DoCommit(TaskCompletionSource<bool> taskCompletionSource)
         {
-            this.m_commitTaskCompletionSource = taskCompletionSource;
-            this.TryCommit();
+            if (this.m_state != TransactionState.Pending)
+            {
+                taskCompletionSource.SetResult(false);
+            }
+            else
+            {
+                this.m_commitTaskCompletionSource = taskCompletionSource;
+                this.TryCommit(false);
+            }
         }
 
         internal void DoAbort(TaskCompletionSource<bool> taskCompletionSource)
         {
-            this.Abort();
+            this.Abort(false);
             taskCompletionSource.SetResult(true);
         }
 
-        private void TryCommit()
+        private void TryCommit(bool calledRecursively)
         {
             if (this.m_commitTaskCompletionSource != null)
             {
@@ -168,8 +175,18 @@
                     this.m_transactionManager.OnTransactionCompleted(this.m_id);
                     foreach (Transaction dependentTransaction in this.m_dependentTransactions)
                     {
-                        Debug.Assert(dependentTransaction.m_state == TransactionState.Pending);
-                        dependentTransaction.ReduceDependencyCount();
+                        if (dependentTransaction.m_state == TransactionState.Pending)
+                        {
+                            dependentTransaction.ReduceDependencyCount();
+                        }
+                        else
+                        {
+                            Debug.Assert(dependentTransaction.m_state == TransactionState.Aborted);
+                        }
+                    }
+                    if (!calledRecursively)
+                    {
+                        this.m_transactionManager.Collect();
                     }
                     this.m_commitTaskCompletionSource.SetResult(true);
                     this.m_commitTaskCompletionSource = null;
@@ -180,17 +197,21 @@
         private void ReduceDependencyCount()
         {
             this.m_dependentTransactionCount--;
-            this.TryCommit();
+            this.TryCommit(true);
         }
 
-        private void Abort()
+        private void Abort(bool calledRecursively)
         {
             this.m_state = TransactionState.Aborted;
             this.m_transactionManager.OnTransactionCompleted(this.m_id);
             foreach (Transaction dependentTransaction in this.m_dependentTransactions)
             {
                 Debug.Assert(dependentTransaction.m_state == TransactionState.Pending);
-                dependentTransaction.Abort();
+                dependentTransaction.Abort(true);
+            }
+            if (!calledRecursively)
+            {
+                this.m_transactionManager.Collect();
             }
             if (this.m_commitTaskCompletionSource != null)
             {
