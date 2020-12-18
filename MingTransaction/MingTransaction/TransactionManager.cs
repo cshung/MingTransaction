@@ -2,15 +2,12 @@
 {
     using System;
     using System.Collections.Generic;
-    using System.Diagnostics;
-    using System.Linq;
-    using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
 
     public class TransactionManager
     {
-        private const bool delayCollection = true;
+        private const bool delayCollection = false;
         private Queue<IMessage> m_messages = new Queue<IMessage>();
         private long m_id = 0;
         private Dictionary<string, List<Version>> m_versions = new Dictionary<string, List<Version>>();
@@ -159,7 +156,6 @@
                 long oldestTransaction = this.m_pendingTransactions.Min;
                 foreach (List<Version> versions in this.m_versions.Values)
                 {
-                    List<Version> copy = new List<Version>(versions);
                     List<int> toDelete = new List<int>();
                     bool done = false;
                     for (int i = versions.Count - 1; i >= 0; i--)
@@ -192,16 +188,6 @@
                     {
                         versions.RemoveAt(v);
                     }
-                    Debug.Assert(versions.Count > 0);
-                    bool temp = false;
-                    foreach (Version v in versions)
-                    {
-                        if (v.WriteTransaction.m_state == TransactionState.Committed)
-                        {
-                            temp = true;
-                        }
-                    }
-                    Debug.Assert(temp);
                 }
             }
         }
